@@ -31,6 +31,7 @@ def setup(self):
     if op.isfile("Q.txt") != True:        
         Q = np.zeros((12,5),dtype = float)
         np.savetxt("Q.txt", Q)
+    self.logger.debug(f'Q: {Q}')
     self.coordinate_history = deque([], 20)
     self.logger.info('Initialize')
     
@@ -41,7 +42,7 @@ def act(self):
     x, y, _, bombs_left, score = self.game_state['self']
     self.coordinate_history.append((x,y))
 
-    epsilon = 0
+    epsilon = 0.7
            
     if np.random.rand(1) <= epsilon:
         action_ideas = ['UP','DOWN','RIGHT','LEFT','WAIT']
@@ -119,17 +120,17 @@ def reward_update(self):
         index = 4
         
         
-    alpha = 0.7
+    alpha = 0.01
     for i in range(12):
-        Q[i][index] = Q[i][index] + alpha * (reward - (Q.transpose()).dot(states)[index]) * states[i]
-    
+        Q[i][index] = Q[i][index] + alpha * (reward - alpha * ((Q.transpose()).dot(states))[index]) * alpha * states[i]
+    self.logger.debug(f'Q: {Q}')
     np.savetxt("Q.txt", Q)    
     
     
 def end_of_episode(self):  
-    Q = np.loadtxt("Q.txt")
-    arena = self.game_state['arena']
-    coins = self.game_state['coins']
+    #Q = np.loadtxt("Q.txt")
+    #arena = self.game_state['arena']
+    #coins = self.game_state['coins']
    
    # for state in accessible:
    #     if self.next_action == 'UP': next_state = (x,y+1)
