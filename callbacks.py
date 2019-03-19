@@ -14,16 +14,6 @@ import sklearn.preprocessing
 from sklearn.linear_model import SGDRegressor
 from sklearn.kernel_approximation import RBFSampler
 
-def statefun(arena,agent_row,agent_col,coins):   
-    accessible = []
-    for a in range(16):
-        for b in range(16):
-            if (arena[a][b] != -1):
-                accessible.append((a,b))    
-    state=accessible.index((agent_row,agent_col))
-    for i in range(len(coins)):
-        state = np.append(state,accessible.index((coins[i][0],coins[i][1])))
-    return state
 
 def setup(self):
     np.random.seed()    
@@ -31,8 +21,10 @@ def setup(self):
     if op.isfile("Q.txt") != True:        
         Q = np.zeros((12,5),dtype = float)
         np.savetxt("Q.txt", Q)
-    self.logger.debug(f'Q: {Q}')
-    self.coordinate_history = deque([], 20)
+    self.coordinate_history = deque([], 400)
+    self.pick_history = deque([], 400)
+    self.states_history = deque([], 400)
+    self.index_history = deque([], 400)
     self.logger.info('Initialize')
     
 def act(self):    
@@ -68,13 +60,19 @@ def act(self):
         if act == 3: action_ideas.append('RIGHT')
         if act == 4: action_ideas.append('WAIT')        
         self.next_action = action_ideas.pop()
+    self.states_history.append(states)
+    self.pick_history.append(self.next_action)
     self.logger.info('Pick action at random')
     
 def reward_update(self):   
-    Q = np.loadtxt("Q.txt")
     arena = self.game_state['arena']
     coins = self.game_state['coins']
     x, y, _, bombs_left, score = self.game_state['self']
+    
+    # reward matrix
+    if (op.isfile("rewards.txt") == False):
+        rewards = np.zeros((12,5),dtype = float)
+        np.savetxt("rewards.txt", rewards)
     
     f1 = x
     f2 = y
@@ -118,26 +116,32 @@ def reward_update(self):
         index = 3
     if self.next_action == 'WAIT':
         index = 4
-        
-        
-    alpha = 0.01
+    
+    self.index_history.append(index)
+    
+    alpha = 0.3
     for i in range(12):
-        Q[i][index] = Q[i][index] + alpha * (reward - alpha * ((Q.transpose()).dot(states))[index]) * alpha * states[i]
-    self.logger.debug(f'Q: {Q}')
-    np.savetxt("Q.txt", Q)    
+        rewards[i][index] = reward - ((Q.transpose()).dot(states))[index]
+
+    np.savetxt("rewards.txt", rewards)    
     
     
 def end_of_episode(self):  
-    #Q = np.loadtxt("Q.txt")
-    #arena = self.game_state['arena']
-    #coins = self.game_state['coins']
-   
-   # for state in accessible:
-   #     if self.next_action == 'UP': next_state = (x,y+1)
-   #     if self.next_action == 'DOWN': next_state =  (x,y-1)
-   #     if self.next_action == 'LEFT': next_state =  (x-1,y)
-   #     if self.next_action == 'RIGHT': next_state = (x+1,y)
-   #     if self.next_action == 'WAIT': next_state = (x,y)
-   #     max_Q_next = np.argmax(Q[next_state])    
-   # Q[state][self.next_action] = Q[state][self.next_action] + alpha * (reward[state][self.next_action] + gamma * max_Q_next - Q[state][self.next_action])  
+    Q = np.loadtxt("Q.txt")
+    rewards = np.loadtxt("rewards.txt")
+    
+    alpha = 0.3
+    beta = 0.2
+    
+    for k in range(len(self.coordinate_history)):
+        state = self.states_history.popleft()
+        next_state = self.states_history[0]
+        index = self.index_history.popleft()
+        for i in range(12):
+            Q[i][index] = Q[i][index] + alpha * (rewards[i][index] + beta * np.argmax((Q.transpose()).dot(next_state))) * state[i]
+    
+    np.savetxt("Q.txt", Q)
+    
     self.logger.debug(f'Encountered {len(self.events)} game event(s) in final step')
+    
+    
